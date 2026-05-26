@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useMemo, useTransition } from "react";
 import ReactMarkdown from "react-markdown";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -199,17 +199,12 @@ type Props = { initialReviews: WeeklyReview[] };
 
 export default function WeeklyReviewClient({ initialReviews }: Props) {
   const [reviews, setReviews] = useState<WeeklyReview[]>(initialReviews);
-  const [weekOptions, setWeekOptions] = useState<string[]>([]);
-  const [selectedWeek, setSelectedWeek] = useState<string>("");
+  // Computed once during render; client timezone governs week boundaries
+  const weekOptions = useMemo(() => getLast8Mondays(), []);
+  const [selectedWeek, setSelectedWeek] = useState<string>(() => weekOptions[0] ?? "");
   const [activeReview, setActiveReview] = useState<WeeklyReview | null>(initialReviews[0] ?? null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  useEffect(() => {
-    const options = getLast8Mondays();
-    setWeekOptions(options);
-    setSelectedWeek(options[0]);
-  }, []);
 
   function handleGenerate() {
     if (!selectedWeek) return;

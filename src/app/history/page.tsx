@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createServerClient } from "@/lib/supabase/server";
 import HistoryCharts from "@/components/HistoryCharts";
 import type { HistoryEntry, HistoryTarget } from "@/components/HistoryCharts";
