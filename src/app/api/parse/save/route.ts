@@ -104,6 +104,10 @@ export async function POST(req: NextRequest) {
       .upsert({ name: categoryName, kind: "expense" }, { onConflict: "name,kind" });
   }
 
+  // fire-and-forget streak recompute
+  const base = req.nextUrl.origin;
+  fetch(`${base}/api/streaks`, { method: "POST" }).catch(() => {});
+
   return NextResponse.json({
     saved: savedEntries?.length ?? 0,
     ids: savedEntries?.map((e) => e.id) ?? [],

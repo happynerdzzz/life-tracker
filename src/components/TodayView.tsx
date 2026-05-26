@@ -8,6 +8,7 @@ import { Ring } from "@/components/ui/ring";
 import { fetchEntries, deleteEntry, fetchTargets, getDayType } from "@/lib/api";
 import { CATEGORY } from "@/lib/theme";
 import type { Entry, MealData, WorkoutData, CardioData, SleepData, ExpenseData, WeightData } from "@/lib/types";
+import StreakStrip from "./StreakStrip";
 import WeightForm from "./forms/WeightForm";
 import MealForm from "./forms/MealForm";
 import WorkoutForm from "./forms/WorkoutForm";
@@ -210,8 +211,11 @@ export default function TodayView({ refreshKey }: Props) {
             </span>
           </div>
 
+          {/* Habit streaks */}
+          <StreakStrip />
+
           {/* Three rings */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 mt-4">
             <RingCell
               label="Calories"
               value={Math.round(totalKcal)}

@@ -27,5 +27,8 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // fire-and-forget streak recompute
+  const base = req.nextUrl.origin;
+  fetch(`${base}/api/streaks`, { method: "POST" }).catch(() => {});
   return NextResponse.json(data, { status: 201 });
 }

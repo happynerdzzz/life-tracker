@@ -122,3 +122,19 @@ create table weekly_reviews (
 create trigger weekly_reviews_updated_at
   before update on weekly_reviews
   for each row execute function update_updated_at();
+
+-- ─────────────────────────────────────────────
+-- streaks
+-- ─────────────────────────────────────────────
+create table streaks (
+  id              uuid primary key default gen_random_uuid(),
+  habit_key       text not null unique,   -- 'log_anything' | 'meal_logged' | 'workout_on_gym_day' | 'sleep_logged' | 'within_kcal_target'
+  current_streak  int not null default 0,
+  longest_streak  int not null default 0,
+  last_qualified  date,
+  updated_at      timestamptz not null default now()
+);
+
+insert into streaks (habit_key) values
+  ('log_anything'), ('meal_logged'), ('workout_on_gym_day'),
+  ('sleep_logged'), ('within_kcal_target');

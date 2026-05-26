@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { CATEGORY } from "@/lib/theme";
+import StreaksCard from "./StreaksCard";
 import { useState, useMemo } from "react";
 import Link from "next/link";
 
@@ -522,6 +523,9 @@ export default function HistoryCharts({ entries, targets }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Streaks */}
+      <StreaksCard />
     </div>
   );
 }
