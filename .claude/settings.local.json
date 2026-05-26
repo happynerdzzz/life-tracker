@@ -4,7 +4,8 @@
       "Bash(npx tsc *)",
       "Bash(npm install *)",
       "Bash(sudo npm install recharts)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(npm run *)"
     ]
   }
 }

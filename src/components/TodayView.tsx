@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Pencil, Trash2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Ring } from "@/components/ui/ring";
 import { fetchEntries, deleteEntry, fetchTargets, getDayType } from "@/lib/api";
+import { CATEGORY } from "@/lib/theme";
 import type { Entry, MealData, WorkoutData, CardioData, SleepData, ExpenseData, WeightData } from "@/lib/types";
 import WeightForm from "./forms/WeightForm";
 import MealForm from "./forms/MealForm";
@@ -13,10 +14,7 @@ import WorkoutForm from "./forms/WorkoutForm";
 import SleepForm from "./forms/SleepForm";
 import ExpenseForm from "./forms/ExpenseForm";
 
-type Props = {
-  refreshKey: number;
-};
-
+type Props = { refreshKey: number };
 type Target = { day_type: string; kcal_target: number; protein_target_g: number };
 
 function todayDate() {
@@ -28,108 +26,42 @@ function formatTime(time: string | null) {
   return time.slice(0, 5);
 }
 
-function EntryRow({
-  entry,
-  onEdit,
-  onDelete,
-}: {
-  entry: Entry;
-  onEdit: (e: Entry) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [confirming, setConfirming] = useState(false);
-
-  function summary() {
-    switch (entry.type) {
-      case "weight": {
-        const d = entry.data as WeightData;
-        return `${d.kg} kg`;
-      }
-      case "meal": {
-        const d = entry.data as MealData;
-        return `${d.name} (${d.slot}) · ${d.total_kcal} kcal · ${d.total_protein_g}g protein`;
-      }
-      case "workout": {
-        const d = entry.data as WorkoutData;
-        const setCount = d.sets?.length ?? 0;
-        return `${d.exercise} · ${setCount} set${setCount !== 1 ? "s" : ""}${d.muscle_groups?.length ? " · " + d.muscle_groups.join(", ") : ""}`;
-      }
-      case "cardio": {
-        const d = entry.data as CardioData;
-        return `${d.activity} · ${d.duration_min} min${d.distance_km ? ` · ${d.distance_km} km` : ""}`;
-      }
-      case "sleep": {
-        const d = entry.data as SleepData;
-        return `${d.hours} hrs${d.quality ? ` · quality ${d.quality}/5` : ""}`;
-      }
-      case "expense": {
-        const d = entry.data as ExpenseData;
-        return `₹${d.amount_inr} · ${d.item} (${d.category})`;
-      }
-      default:
-        return JSON.stringify(entry.data).slice(0, 60);
+function entrySummary(entry: Entry): string {
+  switch (entry.type) {
+    case "weight": {
+      const d = entry.data as WeightData;
+      return `${d.kg} kg`;
     }
+    case "meal": {
+      const d = entry.data as MealData;
+      return `${d.name} · ${d.total_kcal} kcal · ${d.total_protein_g}g protein`;
+    }
+    case "workout": {
+      const d = entry.data as WorkoutData;
+      return `${d.exercise} · ${d.sets?.length ?? 0} sets`;
+    }
+    case "cardio": {
+      const d = entry.data as CardioData;
+      return `${d.activity} · ${d.duration_min} min`;
+    }
+    case "sleep": {
+      const d = entry.data as SleepData;
+      return `${d.hours}h sleep${d.quality ? ` · ${d.quality}/5` : ""}`;
+    }
+    case "expense": {
+      const d = entry.data as ExpenseData;
+      return `₹${d.amount_inr} · ${d.item}`;
+    }
+    default:
+      return JSON.stringify(entry.data).slice(0, 50);
   }
-
-  return (
-    <div className="flex items-start gap-3 py-2">
-      <span className="text-xs text-muted-foreground w-10 shrink-0 pt-0.5">
-        {formatTime(entry.entry_time)}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary" className="capitalize shrink-0">
-            {entry.type}
-          </Badge>
-          <span className="text-sm truncate">{summary()}</span>
-        </div>
-      </div>
-      <div className="flex gap-1 shrink-0">
-        {!confirming ? (
-          <>
-            <button
-              className="text-xs text-muted-foreground hover:text-foreground min-h-[44px] min-w-[44px] flex items-center justify-center"
-              onClick={() => onEdit(entry)}
-              aria-label="Edit"
-            >
-              ✏️
-            </button>
-            <button
-              className="text-xs text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px] flex items-center justify-center"
-              onClick={() => setConfirming(true)}
-              aria-label="Delete"
-            >
-              🗑️
-            </button>
-          </>
-        ) : (
-          <div className="flex gap-1 items-center">
-            <Button size="sm" variant="destructive" className="h-8 text-xs" onClick={() => onDelete(entry.id)}>
-              Delete
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
-function EditModal({
-  entry,
-  onSaved,
-  onCancel,
-}: {
-  entry: Entry;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
+function EditModal({ entry, onSaved, onCancel }: { entry: Entry; onSaved: () => void; onCancel: () => void }) {
   const formProps = { editing: entry, onSaved, onCancelEdit: onCancel };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-background rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+      <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
         <h2 className="font-semibold text-lg mb-4 capitalize">Edit {entry.type}</h2>
         {entry.type === "weight" && <WeightForm {...formProps} />}
         {entry.type === "meal" && <MealForm {...formProps} />}
@@ -144,6 +76,79 @@ function EditModal({
   );
 }
 
+function TimelineRow({ entry, onEdit, onDelete }: { entry: Entry; onEdit: (e: Entry) => void; onDelete: (id: string) => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const cat = CATEGORY[entry.type as keyof typeof CATEGORY];
+  const dotColor = cat?.hue ?? "var(--muted-foreground)";
+
+  return (
+    <div className="flex gap-3 group">
+      {/* Left rail */}
+      <div className="flex flex-col items-center shrink-0 pt-1">
+        <div
+          className="size-2.5 rounded-full shrink-0 mt-0.5"
+          style={{ backgroundColor: dotColor }}
+        />
+        <div className="w-px flex-1 bg-border/60 mt-1" />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 pb-3 min-w-0">
+        <div className="flex items-start gap-2">
+          <span className="text-[11px] tabular-nums text-muted-foreground shrink-0 pt-0.5 w-10">
+            {formatTime(entry.entry_time)}
+          </span>
+          <div className="flex-1 min-w-0 bg-muted/40 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-xs font-medium capitalize shrink-0" style={{ color: dotColor }}>
+                {cat?.label ?? entry.type}
+              </span>
+              <span className="text-xs text-muted-foreground truncate">{entrySummary(entry)}</span>
+            </div>
+          </div>
+
+          {/* Actions — show on hover */}
+          {!confirming ? (
+            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <button
+                onClick={() => onEdit(entry)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Edit"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+              <button
+                onClick={() => setConfirming(true)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                aria-label="Delete"
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-1 shrink-0 items-center">
+              <Button size="sm" variant="destructive" className="h-7 text-xs px-2" onClick={() => onDelete(entry.id)}>
+                Delete
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => setConfirming(false)}>
+                Cancel
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Day-type pill ─────────────────────────────────────────────────────────────
+
+const DAY_TYPE_STYLE = {
+  gym:     { bg: "bg-[color-mix(in_oklch,var(--chart-3)_12%,transparent)]", text: "text-[oklch(0.50_0.22_30)]", label: "Gym day" },
+  rest:    { bg: "bg-[color-mix(in_oklch,var(--chart-4)_12%,transparent)]", text: "text-[oklch(0.45_0.18_290)]", label: "Rest day" },
+  weekend: { bg: "bg-[color-mix(in_oklch,var(--chart-2)_12%,transparent)]", text: "text-[oklch(0.48_0.18_145)]", label: "Weekend" },
+} as const;
+
 export default function TodayView({ refreshKey }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
@@ -155,15 +160,8 @@ export default function TodayView({ refreshKey }: Props) {
     let cancelled = false;
     async function run() {
       setLoading(true);
-      const [ents, tgts] = await Promise.all([
-        fetchEntries(todayDate()),
-        fetchTargets(),
-      ]);
-      if (!cancelled) {
-        setEntries(ents);
-        setTargets(tgts);
-        setLoading(false);
-      }
+      const [ents, tgts] = await Promise.all([fetchEntries(todayDate()), fetchTargets()]);
+      if (!cancelled) { setEntries(ents); setTargets(tgts); setLoading(false); }
     }
     run();
     return () => { cancelled = true; };
@@ -179,115 +177,84 @@ export default function TodayView({ refreshKey }: Props) {
     setLocalRefresh((k) => k + 1);
   }
 
-  // ── Summary calculations ──────────────────────────────────────────────────
   const dayType = getDayType(new Date());
   const target = targets.find((t) => t.day_type === dayType);
+  const dayStyle = DAY_TYPE_STYLE[dayType];
 
-  const totalKcal = entries
-    .filter((e) => e.type === "meal")
-    .reduce((s, e) => s + ((e.data as MealData).total_kcal ?? 0), 0);
-
-  const totalProtein = entries
-    .filter((e) => e.type === "meal")
-    .reduce((s, e) => s + ((e.data as MealData).total_protein_g ?? 0), 0);
-
+  const totalKcal = entries.filter((e) => e.type === "meal").reduce((s, e) => s + ((e.data as MealData).total_kcal ?? 0), 0);
+  const totalProtein = entries.filter((e) => e.type === "meal").reduce((s, e) => s + ((e.data as MealData).total_protein_g ?? 0), 0);
   const workoutCount = entries.filter((e) => e.type === "workout").length;
 
-  const sleepHours = entries
-    .filter((e) => e.type === "sleep")
-    .reduce((s, e) => s + ((e.data as SleepData).hours ?? 0), 0);
-
-  const totalSpend = entries
-    .filter((e) => e.type === "expense")
-    .reduce((s, e) => s + ((e.data as ExpenseData).amount_inr ?? 0), 0);
-
-  // ── Group entries by type ─────────────────────────────────────────────────
-  const grouped = entries.reduce<Record<string, Entry[]>>((acc, e) => {
-    (acc[e.type] ??= []).push(e);
-    return acc;
-  }, {});
-
-  const typeOrder = ["weight", "meal", "workout", "cardio", "sleep", "expense", "note"];
-  const orderedTypes = [
-    ...typeOrder.filter((t) => grouped[t]),
-    ...Object.keys(grouped).filter((t) => !typeOrder.includes(t)),
-  ];
+  const sortedEntries = [...entries].sort((a, b) => {
+    const ta = a.entry_time ?? a.created_at ?? "";
+    const tb = b.entry_time ?? b.created_at ?? "";
+    return tb.localeCompare(ta);
+  });
 
   if (loading) {
     return <p className="text-center text-muted-foreground py-8">Loading today…</p>;
   }
 
+  const dateLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
+
   return (
-    <div className="space-y-4">
-      {/* Summary card */}
+    <div className="space-y-6">
+      {/* Hero summary card */}
       <Card>
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-base">
-            Today —{" "}
-            {new Date().toLocaleDateString("en-IN", {
-              weekday: "long",
-              day: "numeric",
-              month: "short",
-            })}
-            <span className="ml-2 text-xs font-normal text-muted-foreground capitalize">
-              ({dayType} day)
+        <CardContent className="px-5 py-5">
+          {/* Date + day-type pill */}
+          <div className="flex items-center justify-between mb-5">
+            <p className="font-semibold text-base tracking-tight">{dateLabel}</p>
+            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${dayStyle.bg} ${dayStyle.text}`}>
+              {dayStyle.label}
             </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <SummaryItem
+          </div>
+
+          {/* Three rings */}
+          <div className="grid grid-cols-3 gap-2">
+            <RingCell
               label="Calories"
-              value={`${Math.round(totalKcal)} kcal`}
-              target={target ? `/ ${target.kcal_target}` : undefined}
-              pct={target ? totalKcal / target.kcal_target : undefined}
+              value={Math.round(totalKcal)}
+              max={target?.kcal_target ?? 2100}
+              unit="kcal"
+              color="var(--chart-2)"
             />
-            <SummaryItem
+            <RingCell
               label="Protein"
-              value={`${Math.round(totalProtein)}g`}
-              target={target ? `/ ${target.protein_target_g}g` : undefined}
-              pct={target ? totalProtein / target.protein_target_g : undefined}
+              value={Math.round(totalProtein)}
+              max={target?.protein_target_g ?? 140}
+              unit="g"
+              color="var(--chart-1)"
             />
-            <SummaryItem label="Workouts" value={String(workoutCount)} />
-            <SummaryItem
-              label="Sleep"
-              value={sleepHours > 0 ? `${sleepHours}h` : "—"}
-            />
-            <SummaryItem
-              label="Spend"
-              value={totalSpend > 0 ? `₹${Math.round(totalSpend)}` : "—"}
+            <RingCell
+              label="Workouts"
+              value={workoutCount}
+              max={dayType === "gym" ? 1 : dayType === "rest" ? 0 : 1}
+              unit={workoutCount === 1 ? "session" : "sessions"}
+              color="var(--chart-3)"
             />
           </div>
         </CardContent>
       </Card>
 
-      {/* Entries by type */}
-      {entries.length === 0 ? (
-        <p className="text-center text-muted-foreground py-6 text-sm">
-          No entries yet today. Use the forms above to start tracking.
-        </p>
+      {/* Entry timeline */}
+      {sortedEntries.length === 0 ? (
+        <div className="flex flex-col items-center py-12 gap-2 text-center">
+          <span className="text-5xl">📋</span>
+          <p className="text-sm font-medium text-muted-foreground">Nothing logged yet today</p>
+          <p className="text-xs text-muted-foreground/70">Tap a button below to start tracking</p>
+        </div>
       ) : (
-        <Card>
-          <CardContent className="px-4 py-3">
-            {orderedTypes.map((type, ti) => (
-              <div key={type}>
-                {ti > 0 && <Separator className="my-1" />}
-                <div className="py-1">
-                  {grouped[type].map((entry, ei) => (
-                    <div key={entry.id}>
-                      {ei > 0 && <Separator className="my-0.5 opacity-30" />}
-                      <EntryRow
-                        entry={entry}
-                        onEdit={setEditingEntry}
-                        onDelete={handleDelete}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <div className="space-y-0 -mb-3">
+          {sortedEntries.map((entry) => (
+            <TimelineRow
+              key={entry.id}
+              entry={entry}
+              onEdit={setEditingEntry}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
       )}
 
       {editingEntry && (
@@ -301,45 +268,15 @@ export default function TodayView({ refreshKey }: Props) {
   );
 }
 
-function SummaryItem({
-  label,
-  value,
-  target,
-  pct,
-}: {
-  label: string;
-  value: string;
-  target?: string;
-  pct?: number;
-}) {
-  const color =
-    pct === undefined
-      ? ""
-      : pct >= 0.9 && pct <= 1.1
-      ? "text-green-600"
-      : pct > 1.1
-      ? "text-orange-500"
-      : "text-foreground";
-
+function RingCell({ label, value, max, unit, color }: { label: string; value: number; max: number; unit: string; color: string }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={`text-sm font-semibold ${color}`}>
-        {value}
-        {target && (
-          <span className="font-normal text-muted-foreground ml-1">{target}</span>
-        )}
-      </span>
-      {pct !== undefined && (
-        <div className="h-1 rounded-full bg-muted overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all ${
-              pct > 1.05 ? "bg-orange-400" : "bg-primary"
-            }`}
-            style={{ width: `${Math.min(pct * 100, 100)}%` }}
-          />
-        </div>
-      )}
+    <div className="flex flex-col items-center gap-1.5">
+      <Ring value={value} max={max} size={72} stroke={7} color={color} />
+      <p className="text-xs font-medium text-center">{label}</p>
+      <p className="text-[11px] tabular-nums text-muted-foreground text-center">
+        <span className="font-semibold text-foreground">{value}</span>
+        {max > 0 && <span> / {max}</span>} {unit}
+      </p>
     </div>
   );
 }
