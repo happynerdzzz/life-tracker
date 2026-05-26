@@ -59,6 +59,9 @@ export default function Home() {
         <div className="max-w-2xl mx-auto px-5 py-3 flex items-center justify-between">
           <h1 className="font-semibold text-lg tracking-tight">Life Tracker</h1>
           <nav className="flex items-center gap-4">
+            <Link href="/goals" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Goals
+            </Link>
             <Link href="/exercises" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Exercises
             </Link>

@@ -138,3 +138,23 @@ create table streaks (
 insert into streaks (habit_key) values
   ('log_anything'), ('meal_logged'), ('workout_on_gym_day'),
   ('sleep_logged'), ('within_kcal_target');
+
+-- ─────────────────────────────────────────────
+-- goals
+-- ─────────────────────────────────────────────
+create table goals (
+  id            uuid primary key default gen_random_uuid(),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  kind          text not null,           -- 'weight' | 'lift' | 'savings' | 'protein_avg' | 'custom'
+  title         text not null,
+  target_value  numeric not null,
+  target_unit   text,                    -- 'kg' | 'inr' | 'g' | etc
+  target_date   date,
+  reference     text,                    -- e.g. exercise name for 'lift'
+  start_value   numeric,
+  is_active     boolean not null default true
+);
+
+create trigger goals_updated_at
+  before update on goals for each row execute function update_updated_at();
