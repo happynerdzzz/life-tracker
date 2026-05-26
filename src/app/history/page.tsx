@@ -12,7 +12,7 @@ export default async function HistoryPage() {
     supabase
       .from("entries")
       .select("entry_date, type, data")
-      .in("type", ["weight", "meal", "expense"])
+      .in("type", ["weight", "meal", "expense", "sleep", "workout"])
       .order("entry_date", { ascending: true }),
     supabase.from("targets").select("day_type, kcal_target, protein_target_g"),
   ]);
@@ -21,20 +21,14 @@ export default async function HistoryPage() {
   const targets: HistoryTarget[] = targetsRes.data ?? [];
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="bg-background border-b sticky top-0 z-40">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-4">
-          <Link
-            href="/"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← Today
-          </Link>
-          <h1 className="font-bold text-lg tracking-tight">History</h1>
+    <div className="min-h-screen bg-background">
+      <header className="bg-card/80 backdrop-blur-xl border-b border-border/60 sticky top-0 z-40">
+        <div className="max-w-2xl mx-auto px-5 py-3 flex items-center gap-4">
+          <h1 className="font-semibold text-lg tracking-tight">History</h1>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4">
+      <main className="max-w-2xl mx-auto px-5 py-6">
         <HistoryCharts entries={entries} targets={targets} />
       </main>
     </div>
