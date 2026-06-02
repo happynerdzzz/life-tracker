@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -14,11 +15,13 @@ import {
   Tooltip,
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
-import { fetchEntriesRange } from "@/lib/api";
+import { fetchEntriesRange, deleteEntry } from "@/lib/api";
 import type { Entry, ExpenseData } from "@/lib/types";
 import StatementPreviewModal from "./StatementPreviewModal";
+import ExpenseForm from "./forms/ExpenseForm";
 import type { StatementRow } from "@/app/api/statements/route";
 
 const EXPENSE_COLORS = [
@@ -202,6 +205,78 @@ function DailyBarChart({ entries, categories }: { entries: Entry[]; categories: 
   );
 }
 
+// ─── Transaction row ──────────────────────────────────────────────────────────
+
+function TransactionRow({
+  entry,
+  onEdit,
+  onDelete,
+}: {
+  entry: Entry;
+  onEdit: (e: Entry) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const d = entry.data as ExpenseData;
+
+  return (
+    <tr className="group border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors">
+      <td className="py-2.5 pl-4 pr-2 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+        {entry.entry_date}
+      </td>
+      <td className="py-2.5 px-2 text-sm max-w-[140px] truncate">
+        {d.item}
+        {d.split && <span className="ml-1 text-[10px] text-muted-foreground/70">split</span>}
+      </td>
+      <td className="py-2.5 px-2 text-xs text-muted-foreground hidden sm:table-cell">
+        {d.category}
+      </td>
+      <td className="py-2.5 px-2 text-sm tabular-nums font-mono text-right">
+        ₹{Math.round(d.amount_inr)}
+      </td>
+      <td className="py-2.5 pl-2 pr-4 text-right">
+        {!confirming ? (
+          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity sm:flex-row">
+            <button
+              onClick={() => onEdit(entry)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Edit"
+            >
+              <Pencil className="size-3.5" />
+            </button>
+            <button
+              onClick={() => setConfirming(true)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              aria-label="Delete"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-end gap-1">
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs px-2"
+              onClick={() => { setConfirming(false); onDelete(entry.id); }}
+            >
+              Delete
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2"
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function FinanceDashboard() {
@@ -218,7 +293,23 @@ export default function FinanceDashboard() {
   const [importedRows, setImportedRows] = useState<StatementRow[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // CRUD state
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [addingNew, setAddingNew] = useState(false);
+
   const today = todayIST();
+
+  async function reloadEntries() {
+    const { first, last } = monthBounds(year, month);
+    const prev = prevMonth(year, month);
+    const { first: prevFirst, last: prevLast } = monthBounds(prev.year, prev.month);
+    const [curr, prevData] = await Promise.all([
+      fetchEntriesRange(first, last, "expense"),
+      fetchEntriesRange(prevFirst, prevLast, "expense"),
+    ]);
+    setEntries(curr);
+    setPrevEntries(prevData);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -246,7 +337,7 @@ export default function FinanceDashboard() {
     const nextM = month === 12 ? 1 : month + 1;
     const nextY = month === 12 ? year + 1 : year;
     const { first } = monthBounds(nextY, nextM);
-    if (first > today) return; // don't go into the future
+    if (first > today) return;
     setYear(nextY); setMonth(nextM);
   }
 
@@ -275,6 +366,11 @@ export default function FinanceDashboard() {
 
   const categories = useMemo(() => spendSlices.map((s) => s.name), [spendSlices]);
 
+  const sortedEntries = useMemo(
+    () => [...entries].sort((a, b) => b.entry_date.localeCompare(a.entry_date)),
+    [entries]
+  );
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -299,16 +395,31 @@ export default function FinanceDashboard() {
     }
   }
 
-  function handleImportSaved() {
+  async function handleImportSaved() {
     setImportedRows(null);
-    // Reload current month data
-    setYear((y) => y); // trigger effect by nudging (use a separate key or just set same values)
-    const now2 = new Date();
-    setYear(now2.getFullYear()); setMonth(now2.getMonth() + 1);
-    // Reload
-    const { first, last } = monthBounds(year, month);
-    fetchEntriesRange(first, last, "expense").then(setEntries);
+    await reloadEntries();
   }
+
+  async function handleDelete(id: string) {
+    await deleteEntry(id);
+    await reloadEntries();
+  }
+
+  async function handleEditSaved() {
+    setEditingEntry(null);
+    await reloadEntries();
+  }
+
+  async function handleAddSaved() {
+    setAddingNew(false);
+    await reloadEntries();
+  }
+
+  // entryDate for "add new": first day of selected month, capped at today
+  const addEntryDate = useMemo(() => {
+    const { first } = monthBounds(year, month);
+    return first > today ? today : first;
+  }, [year, month, today]);
 
   return (
     <div className="space-y-6">
@@ -406,6 +517,49 @@ export default function FinanceDashboard() {
               <DailyBarChart entries={entries} categories={categories} />
             </CardContent>
           </Card>
+
+          {/* Transactions table */}
+          <Card>
+            <CardContent className="px-4 pb-4 pt-3">
+              <div className="flex items-center justify-between mb-3">
+                <SectionHeader title="Transactions" />
+                <button
+                  onClick={() => setAddingNew(true)}
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  + Add transaction
+                </button>
+              </div>
+
+              {sortedEntries.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No transactions this month</p>
+              ) : (
+                <div className="overflow-x-auto -mx-4 px-0">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/60">
+                        <th className="py-2 pl-4 pr-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                        <th className="py-2 px-2 text-left text-xs font-medium text-muted-foreground">Item</th>
+                        <th className="py-2 px-2 text-left text-xs font-medium text-muted-foreground hidden sm:table-cell">Category</th>
+                        <th className="py-2 px-2 text-right text-xs font-medium text-muted-foreground">Amount</th>
+                        <th className="py-2 pl-2 pr-4" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedEntries.map((entry) => (
+                        <TransactionRow
+                          key={entry.id}
+                          entry={entry}
+                          onEdit={setEditingEntry}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -416,6 +570,43 @@ export default function FinanceDashboard() {
           onSaved={handleImportSaved}
           onCancel={() => setImportedRows(null)}
         />
+      )}
+
+      {/* Edit modal */}
+      {editingEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <h2 className="font-semibold text-lg mb-4">Edit transaction</h2>
+            <ExpenseForm
+              editing={editingEntry}
+              onSaved={handleEditSaved}
+              onCancelEdit={() => setEditingEntry(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Add new modal */}
+      {addingNew && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg">Add transaction</h2>
+              <button
+                onClick={() => setAddingNew(false)}
+                className="text-muted-foreground hover:text-foreground text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <ExpenseForm
+              entryDate={addEntryDate}
+              onSaved={handleAddSaved}
+              onCancelEdit={() => setAddingNew(false)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
