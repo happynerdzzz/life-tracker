@@ -11,9 +11,10 @@ type Props = {
   onSaved: () => void;
   editing?: Entry;
   onCancelEdit?: () => void;
+  entryDate?: string;
 };
 
-export default function WeightForm({ onSaved, editing, onCancelEdit }: Props) {
+export default function WeightForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
   const [kg, setKg] = useState(
     editing ? String((editing.data as { kg: number }).kg) : ""
   );
@@ -33,7 +34,7 @@ export default function WeightForm({ onSaved, editing, onCancelEdit }: Props) {
       if (editing) {
         await updateEntry(editing.id, "weight", { kg: val });
       } else {
-        await saveEntry("weight", { kg: val });
+        await saveEntry("weight", { kg: val }, entryDate);
       }
       setKg("");
       onSaved();

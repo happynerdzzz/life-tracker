@@ -11,6 +11,7 @@ type Props = {
   onSaved: () => void;
   editing?: Entry;
   onCancelEdit?: () => void;
+  entryDate?: string;
 };
 
 type SetRow = { reps: string; weight_kg: string; notes: string };
@@ -22,7 +23,7 @@ const ALL_MUSCLE_GROUPS = [
   "Legs", "Glutes", "Core", "Calves", "Full body",
 ];
 
-export default function WorkoutForm({ onSaved, editing, onCancelEdit }: Props) {
+export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
   const existing = editing?.data as WorkoutData | undefined;
   const [exercise, setExercise] = useState(existing?.exercise ?? "");
   const [sets, setSets] = useState<SetRow[]>(
@@ -84,7 +85,7 @@ export default function WorkoutForm({ onSaved, editing, onCancelEdit }: Props) {
       if (editing) {
         await updateEntry(editing.id, "workout", data);
       } else {
-        await saveEntry("workout", data);
+        await saveEntry("workout", data, entryDate);
       }
       setExercise("");
       setSets([emptySet()]);

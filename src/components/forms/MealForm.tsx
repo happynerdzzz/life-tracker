@@ -18,13 +18,14 @@ type Props = {
   onSaved: () => void;
   editing?: Entry;
   onCancelEdit?: () => void;
+  entryDate?: string;
 };
 
 type Item = { food: string; qty: string; kcal: string; protein_g: string };
 
 const emptyItem = (): Item => ({ food: "", qty: "", kcal: "", protein_g: "" });
 
-export default function MealForm({ onSaved, editing, onCancelEdit }: Props) {
+export default function MealForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
   const existing = editing?.data as MealData | undefined;
   const [name, setName] = useState(existing?.name ?? "");
   const [slot, setSlot] = useState<string>(existing?.slot ?? "");
@@ -82,7 +83,7 @@ export default function MealForm({ onSaved, editing, onCancelEdit }: Props) {
       if (editing) {
         await updateEntry(editing.id, "meal", data);
       } else {
-        await saveEntry("meal", data);
+        await saveEntry("meal", data, entryDate);
       }
       setName("");
       setSlot("");

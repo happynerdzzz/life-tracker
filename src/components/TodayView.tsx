@@ -16,12 +16,8 @@ import WorkoutForm from "./forms/WorkoutForm";
 import SleepForm from "./forms/SleepForm";
 import ExpenseForm from "./forms/ExpenseForm";
 
-type Props = { refreshKey: number };
+type Props = { refreshKey: number; logDate: string };
 type Target = { day_type: string; kcal_target: number; protein_target_g: number };
-
-function todayDate() {
-  return new Date().toISOString().split("T")[0];
-}
 
 function formatTime(time: string | null) {
   if (!time) return "";
@@ -151,7 +147,7 @@ const DAY_TYPE_STYLE = {
   weekend: { bg: "bg-[color-mix(in_oklch,var(--chart-2)_12%,transparent)]", text: "text-[oklch(0.48_0.18_145)]", label: "Weekend" },
 } as const;
 
-export default function TodayView({ refreshKey }: Props) {
+export default function TodayView({ refreshKey, logDate }: Props) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,12 +158,12 @@ export default function TodayView({ refreshKey }: Props) {
     let cancelled = false;
     async function run() {
       setLoading(true);
-      const [ents, tgts] = await Promise.all([fetchEntries(todayDate()), fetchTargets()]);
+      const [ents, tgts] = await Promise.all([fetchEntries(logDate), fetchTargets()]);
       if (!cancelled) { setEntries(ents); setTargets(tgts); setLoading(false); }
     }
     run();
     return () => { cancelled = true; };
-  }, [refreshKey, localRefresh]);
+  }, [refreshKey, localRefresh, logDate]);
 
   async function handleDelete(id: string) {
     await deleteEntry(id);
@@ -179,7 +175,7 @@ export default function TodayView({ refreshKey }: Props) {
     setLocalRefresh((k) => k + 1);
   }
 
-  const dayType = getDayType(new Date());
+  const dayType = getDayType(new Date(logDate + "T00:00:00"));
   const target = targets.find((t) => t.day_type === dayType);
   const dayStyle = DAY_TYPE_STYLE[dayType];
 
@@ -194,10 +190,10 @@ export default function TodayView({ refreshKey }: Props) {
   });
 
   if (loading) {
-    return <p className="text-center text-muted-foreground py-8">Loading today…</p>;
+    return <p className="text-center text-muted-foreground py-8">Loading…</p>;
   }
 
-  const dateLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
+  const dateLabel = new Date(logDate + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
 
   return (
     <div className="space-y-6">
@@ -249,7 +245,7 @@ export default function TodayView({ refreshKey }: Props) {
       {sortedEntries.length === 0 ? (
         <div className="flex flex-col items-center py-12 gap-2 text-center">
           <span className="text-5xl">📋</span>
-          <p className="text-sm font-medium text-muted-foreground">Nothing logged yet today</p>
+          <p className="text-sm font-medium text-muted-foreground">Nothing logged yet</p>
           <p className="text-xs text-muted-foreground/70">Tap a button below to start tracking</p>
         </div>
       ) : (

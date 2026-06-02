@@ -11,9 +11,10 @@ type Props = {
   onSaved: () => void;
   editing?: Entry;
   onCancelEdit?: () => void;
+  entryDate?: string;
 };
 
-export default function ExpenseForm({ onSaved, editing, onCancelEdit }: Props) {
+export default function ExpenseForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
   const existing = editing?.data as ExpenseData | undefined;
   const [amount, setAmount] = useState(existing ? String(existing.amount_inr) : "");
   const [item, setItem] = useState(existing?.item ?? "");
@@ -67,7 +68,7 @@ export default function ExpenseForm({ onSaved, editing, onCancelEdit }: Props) {
       if (editing) {
         await updateEntry(editing.id, "expense", data);
       } else {
-        await saveEntry("expense", data);
+        await saveEntry("expense", data, entryDate);
       }
       setAmount("");
       setItem("");

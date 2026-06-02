@@ -11,11 +11,12 @@ type Props = {
   onSaved: () => void;
   editing?: Entry;
   onCancelEdit?: () => void;
+  entryDate?: string;
 };
 
 const QUALITY_LABELS = ["", "Terrible", "Poor", "Okay", "Good", "Great"];
 
-export default function SleepForm({ onSaved, editing, onCancelEdit }: Props) {
+export default function SleepForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
   const existing = editing?.data as SleepData | undefined;
   const [hours, setHours] = useState(existing ? String(existing.hours) : "");
   const [quality, setQuality] = useState<number>(existing?.quality ?? 0);
@@ -37,7 +38,7 @@ export default function SleepForm({ onSaved, editing, onCancelEdit }: Props) {
       if (editing) {
         await updateEntry(editing.id, "sleep", data);
       } else {
-        await saveEntry("sleep", data);
+        await saveEntry("sleep", data, entryDate);
       }
       setHours("");
       setQuality(0);

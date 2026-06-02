@@ -29,10 +29,18 @@ const FORM_TITLES: Record<string, string> = {
   expense: "Log expense",
 };
 
+function todayIST(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeForm, setActiveForm] = useState<FormType>(null);
   const [dumpOpen, setDumpOpen] = useState(false);
+  const [logDate, setLogDate] = useState(todayIST);
+
+  const today = todayIST();
+  const isToday = logDate === today;
 
   function refresh() {
     setRefreshKey((k) => k + 1);
@@ -77,7 +85,28 @@ export default function Home() {
 
       {/* Main content */}
       <main className="max-w-2xl mx-auto px-5 py-6 space-y-6">
-        <TodayView refreshKey={refreshKey} />
+        {/* Date selector */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-sm text-muted-foreground shrink-0">Logging for</span>
+          <input
+            type="date"
+            value={logDate}
+            max={today}
+            onChange={(e) => e.target.value && setLogDate(e.target.value)}
+            className="text-sm bg-muted/50 rounded-lg px-3 py-1.5 border-0 outline-none
+                       focus:ring-2 focus:ring-primary/30 cursor-pointer transition-all"
+          />
+          {!isToday && (
+            <button
+              onClick={() => setLogDate(today)}
+              className="text-xs text-primary font-medium hover:underline shrink-0"
+            >
+              Back to today
+            </button>
+          )}
+        </div>
+
+        <TodayView refreshKey={refreshKey} logDate={logDate} />
       </main>
 
       {/* Fixed bottom quick-add dock */}
@@ -112,11 +141,11 @@ export default function Home() {
         <Sheet key={item.id} open={activeForm === item.id} onOpenChange={(o) => !o && closeForm()}>
           <SheetContent title={FORM_TITLES[item.id!]}>
             <div className="px-5 pb-6 pt-3">
-              {item.id === "weight"  && <WeightForm  onSaved={handleFormSaved} onCancelEdit={closeForm} />}
-              {item.id === "meal"    && <MealForm    onSaved={handleFormSaved} onCancelEdit={closeForm} />}
-              {item.id === "workout" && <WorkoutForm onSaved={handleFormSaved} onCancelEdit={closeForm} />}
-              {item.id === "sleep"   && <SleepForm   onSaved={handleFormSaved} onCancelEdit={closeForm} />}
-              {item.id === "expense" && <ExpenseForm onSaved={handleFormSaved} onCancelEdit={closeForm} />}
+              {item.id === "weight"  && <WeightForm  onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
+              {item.id === "meal"    && <MealForm    onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
+              {item.id === "workout" && <WorkoutForm onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
+              {item.id === "sleep"   && <SleepForm   onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
+              {item.id === "expense" && <ExpenseForm onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
             </div>
           </SheetContent>
         </Sheet>
@@ -126,7 +155,7 @@ export default function Home() {
       <Sheet open={dumpOpen} onOpenChange={setDumpOpen}>
         <SheetContent title="Dump your day">
           <div className="px-5 pb-6 pt-2">
-            <DumpDayBox onSaved={handleDumpSaved} />
+            <DumpDayBox onSaved={handleDumpSaved} entryDate={logDate} />
           </div>
         </SheetContent>
       </Sheet>
