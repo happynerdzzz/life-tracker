@@ -48,7 +48,7 @@ function entrySummary(entry: Entry): string {
     }
     case "expense": {
       const d = entry.data as ExpenseData;
-      return `₹${d.amount_inr} · ${d.item}`;
+      return `₹${d.amount_inr} · ${d.item}${d.split ? " · split" : ""}`;
     }
     default:
       return JSON.stringify(entry.data).slice(0, 50);

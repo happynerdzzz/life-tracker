@@ -54,6 +54,14 @@ export async function fetchEntries(date: string): Promise<Entry[]> {
   return res.json();
 }
 
+export async function fetchEntriesRange(from: string, to: string, type?: string): Promise<Entry[]> {
+  const params = new URLSearchParams({ from, to });
+  if (type) params.set("type", type);
+  const res = await fetch(`/api/entries?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch entries");
+  return res.json();
+}
+
 export async function fetchExercises(): Promise<{ id: string; name: string; muscle_groups: string[] | null }[]> {
   const res = await fetch("/api/exercises");
   if (!res.ok) return [];

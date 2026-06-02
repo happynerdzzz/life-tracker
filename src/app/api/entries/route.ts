@@ -4,10 +4,29 @@ import { createServerClient } from "@/lib/supabase/server";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
-  if (!date) {
-    return NextResponse.json({ error: "date required" }, { status: 400 });
-  }
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+  const type = searchParams.get("type");
+
   const supabase = createServerClient();
+
+  if (from && to) {
+    let q = supabase
+      .from("entries")
+      .select("*")
+      .gte("entry_date", from)
+      .lte("entry_date", to)
+      .order("entry_date", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (type) q = q.eq("type", type);
+    const { data, error } = await q;
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data);
+  }
+
+  if (!date) {
+    return NextResponse.json({ error: "date or from+to required" }, { status: 400 });
+  }
   const { data, error } = await supabase
     .from("entries")
     .select("*")

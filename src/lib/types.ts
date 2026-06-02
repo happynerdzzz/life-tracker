@@ -39,10 +39,18 @@ export type SleepData = {
   quality?: 1 | 2 | 3 | 4 | 5;
 };
 
+export type SplitParticipant = { name: string; share: number; settled: boolean };
+export type SplitInfo = {
+  total_amount: number;
+  paid_by: "me" | string;
+  participants: SplitParticipant[];
+};
+
 export type ExpenseData = {
   amount_inr: number;
   item: string;
   category: string;
+  split?: SplitInfo;
 };
 
 export type NoteData = {

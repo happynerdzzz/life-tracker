@@ -76,6 +76,9 @@ export default function Home() {
             <Link href="/history" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               History
             </Link>
+            <Link href="/finance" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Finance
+            </Link>
             <Link href="/review" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Review
             </Link>
