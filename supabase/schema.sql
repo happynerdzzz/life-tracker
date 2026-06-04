@@ -93,6 +93,7 @@ create table targets (
   day_type        text not null,  -- 'gym'|'rest'|'weekend'
   kcal_target     int,
   protein_target_g int,
+  bmr_kcal        int,
   notes           text
 );
 

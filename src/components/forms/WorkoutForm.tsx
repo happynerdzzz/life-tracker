@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { saveEntry, updateEntry, fetchExercises } from "@/lib/api";
+import { saveEntry, fetchExercises } from "@/lib/api";
 import type { Entry, WorkoutData } from "@/lib/types";
 
 type Props = {
@@ -14,107 +14,360 @@ type Props = {
   entryDate?: string;
 };
 
-type SetRow = { reps: string; weight_kg: string; notes: string };
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const emptySet = (): SetRow => ({ reps: "", weight_kg: "", notes: "" });
+const KCAL_PER_KG_REP = 0.04;
+const KCAL_PER_BW_REP = 0.30;
 
 const ALL_MUSCLE_GROUPS = [
   "Chest", "Back", "Shoulders", "Biceps", "Triceps",
   "Legs", "Glutes", "Core", "Calves", "Full body",
 ];
 
-const WORKOUT_MET = 4.5;
-const DEFAULT_WEIGHT_KG = 77;
+const WORKOUT_TEMPLATES: Record<string, { exercise: string; muscle_groups: string[] }[]> = {
+  "Full Body": [
+    { exercise: "Squat",           muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Bench Press",     muscle_groups: ["Chest", "Triceps", "Shoulders"] },
+    { exercise: "Deadlift",        muscle_groups: ["Back", "Legs", "Glutes"] },
+    { exercise: "Overhead Press",  muscle_groups: ["Shoulders", "Triceps"] },
+    { exercise: "Bent-over Row",   muscle_groups: ["Back", "Biceps"] },
+  ],
+  "Push": [
+    { exercise: "Bench Press",            muscle_groups: ["Chest", "Triceps", "Shoulders"] },
+    { exercise: "Overhead Press",         muscle_groups: ["Shoulders", "Triceps"] },
+    { exercise: "Incline Dumbbell Press", muscle_groups: ["Chest", "Shoulders"] },
+    { exercise: "Tricep Extension",       muscle_groups: ["Triceps"] },
+    { exercise: "Lateral Raise",          muscle_groups: ["Shoulders"] },
+  ],
+  "Pull": [
+    { exercise: "Deadlift",      muscle_groups: ["Back", "Legs", "Glutes"] },
+    { exercise: "Pull-up",       muscle_groups: ["Back", "Biceps"] },
+    { exercise: "Lat Pulldown",  muscle_groups: ["Back", "Biceps"] },
+    { exercise: "Bent-over Row", muscle_groups: ["Back", "Biceps"] },
+    { exercise: "Bicep Curl",    muscle_groups: ["Biceps"] },
+  ],
+  "Legs": [
+    { exercise: "Squat",             muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Romanian Deadlift", muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Leg Press",         muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Leg Curl",          muscle_groups: ["Legs"] },
+    { exercise: "Calf Raise",        muscle_groups: ["Calves"] },
+  ],
+  "Upper": [
+    { exercise: "Bench Press",    muscle_groups: ["Chest", "Triceps"] },
+    { exercise: "Overhead Press", muscle_groups: ["Shoulders", "Triceps"] },
+    { exercise: "Pull-up",        muscle_groups: ["Back", "Biceps"] },
+    { exercise: "Bent-over Row",  muscle_groups: ["Back", "Biceps"] },
+    { exercise: "Lateral Raise",  muscle_groups: ["Shoulders"] },
+  ],
+  "Lower": [
+    { exercise: "Squat",             muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Deadlift",          muscle_groups: ["Back", "Legs"] },
+    { exercise: "Leg Press",         muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Romanian Deadlift", muscle_groups: ["Legs", "Glutes"] },
+    { exercise: "Calf Raise",        muscle_groups: ["Calves"] },
+  ],
+};
 
-export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
-  const existing = editing?.data as WorkoutData | undefined;
-  const [exercise, setExercise] = useState(existing?.exercise ?? "");
-  const [sets, setSets] = useState<SetRow[]>(
-    existing?.sets?.map((s) => ({
-      reps: String(s.reps),
-      weight_kg: s.weight_kg != null ? String(s.weight_kg) : "",
-      notes: s.notes ?? "",
-    })) ?? [emptySet()]
-  );
-  const [muscleGroups, setMuscleGroups] = useState<string[]>(existing?.muscle_groups ?? []);
-  const [duration, setDuration] = useState(existing?.duration_min != null ? String(existing.duration_min) : "");
-  const [caloriesOverride, setCaloriesOverride] = useState(
-    existing?.calories_burned != null ? String(existing.calories_burned) : ""
-  );
-  const [exercises, setExercises] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const exRef = useRef<HTMLDivElement>(null);
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type SetRow = { reps: string; weight_kg: string; notes: string };
+type DbExercise = { id: string; name: string; muscle_groups: string[] | null };
+
+type SessionExercise = {
+  id: string; // client-only key
+  exercise: string;
+  muscle_groups: string[];
+  sets: SetRow[];
+  caloriesOverride: string;
+};
+
+function emptySet(): SetRow { return { reps: "", weight_kg: "", notes: "" }; }
+
+function newExercise(exercise = "", muscle_groups: string[] = []): SessionExercise {
+  return { id: Math.random().toString(36).slice(2), exercise, muscle_groups, sets: [emptySet()], caloriesOverride: "" };
+}
+
+function estimateKcal(sets: SetRow[]): number {
+  let total = 0;
+  for (const s of sets) {
+    const reps = parseInt(s.reps) || 0;
+    const wt = parseFloat(s.weight_kg) || 0;
+    total += wt > 0 ? wt * reps * KCAL_PER_KG_REP : reps * KCAL_PER_BW_REP;
+  }
+  return Math.round(total);
+}
+
+// ─── Exercise name autocomplete ───────────────────────────────────────────────
+
+function ExerciseInput({
+  value,
+  muscleGroups,
+  dbExercises,
+  onChange,
+}: {
+  value: string;
+  muscleGroups: string[];
+  dbExercises: DbExercise[];
+  onChange: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchExercises().then((list) => setExercises(list.map((e) => e.name)));
+    function h(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (exRef.current && !exRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+  const filtered = dbExercises
+    .filter((ex) => {
+      const nameMatch = !value.trim() || ex.name.toLowerCase().includes(value.toLowerCase());
+      const groupMatch =
+        muscleGroups.length === 0 ||
+        muscleGroups.some((g) => (ex.muscle_groups ?? []).includes(g));
+      return nameMatch && groupMatch;
+    })
+    .slice(0, 10);
 
-  const filteredEx = exercises.filter((e) =>
-    e.toLowerCase().includes(exercise.toLowerCase())
+  return (
+    <div ref={ref} className="relative">
+      <Input
+        placeholder="Exercise name"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        autoComplete="off"
+        className="min-h-[44px]"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow-md max-h-52 overflow-y-auto">
+          {filtered.map((ex) => (
+            <li
+              key={ex.id}
+              className="px-3 py-2 cursor-pointer hover:bg-accent text-sm min-h-[40px] flex flex-col justify-center"
+              onMouseDown={() => { onChange(ex.name); setOpen(false); }}
+            >
+              <span>{ex.name}</span>
+              {ex.muscle_groups && ex.muscle_groups.length > 0 && (
+                <span className="text-[11px] text-muted-foreground">{ex.muscle_groups.join(", ")}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
+}
 
-  const durationNum = parseFloat(duration) || 0;
-  const estimatedKcal = useMemo(() => {
-    if (!durationNum) return null;
-    return Math.round(WORKOUT_MET * DEFAULT_WEIGHT_KG * (durationNum / 60));
-  }, [durationNum]);
+// ─── Single exercise card ─────────────────────────────────────────────────────
 
-  const finalCalories = caloriesOverride
-    ? parseFloat(caloriesOverride) || 0
-    : (estimatedKcal ?? 0);
+function ExerciseCard({
+  ex,
+  dbExercises,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  ex: SessionExercise;
+  dbExercises: DbExercise[];
+  onChange: (updated: SessionExercise) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const estimated = estimateKcal(ex.sets);
+  const displayKcal = ex.caloriesOverride ? parseFloat(ex.caloriesOverride) || 0 : estimated;
 
   function updateSet(idx: number, field: keyof SetRow, val: string) {
-    setSets((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: val } : s)));
+    const sets = ex.sets.map((s, i) => i === idx ? { ...s, [field]: val } : s);
+    onChange({ ...ex, sets });
   }
 
+  function addSet() { onChange({ ...ex, sets: [...ex.sets, emptySet()] }); }
+  function removeSet(idx: number) { onChange({ ...ex, sets: ex.sets.filter((_, i) => i !== idx) }); }
+
   function toggleMuscle(m: string) {
-    setMuscleGroups((prev) =>
-      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
-    );
+    const muscle_groups = ex.muscle_groups.includes(m)
+      ? ex.muscle_groups.filter((x) => x !== m)
+      : [...ex.muscle_groups, m];
+    onChange({ ...ex, muscle_groups });
+  }
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/20 p-4 space-y-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <ExerciseInput
+            value={ex.exercise}
+            muscleGroups={ex.muscle_groups}
+            dbExercises={dbExercises}
+            onChange={(name) => onChange({ ...ex, exercise: name })}
+          />
+        </div>
+        {canRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="shrink-0 text-muted-foreground hover:text-destructive transition-colors text-lg leading-none p-1"
+            aria-label="Remove exercise"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* Muscle group chips */}
+      <div className="flex flex-wrap gap-1.5">
+        {ALL_MUSCLE_GROUPS.map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => toggleMuscle(m)}
+            className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
+              ex.muscle_groups.includes(m)
+                ? "bg-primary text-primary-foreground border-primary"
+                : "border-input bg-background hover:bg-accent text-muted-foreground"
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      {/* Sets table */}
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-[28px_1fr_1fr_1fr_28px] gap-x-1.5 text-[11px] text-muted-foreground px-1">
+          <span>#</span><span>Reps</span><span>kg</span><span>Notes</span><span />
+        </div>
+        {ex.sets.map((s, idx) => (
+          <div key={idx} className="grid grid-cols-[28px_1fr_1fr_1fr_28px] gap-1.5 items-start">
+            <div className="min-h-[40px] flex items-center justify-center text-xs text-muted-foreground">{idx + 1}</div>
+            <Input type="number" placeholder="8" value={s.reps} onChange={(e) => updateSet(idx, "reps", e.target.value)} className="min-h-[40px] text-sm" />
+            <Input type="number" step="any" placeholder="60" value={s.weight_kg} onChange={(e) => updateSet(idx, "weight_kg", e.target.value)} className="min-h-[40px] text-sm" />
+            <Input placeholder="notes" value={s.notes} onChange={(e) => updateSet(idx, "notes", e.target.value)} className="min-h-[40px] text-sm" />
+            <button type="button" onClick={() => removeSet(idx)} className="min-h-[40px] text-muted-foreground hover:text-destructive text-base leading-none">×</button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" onClick={addSet} className="w-full min-h-[36px] text-xs">+ Add set</Button>
+      </div>
+
+      {/* Calorie row */}
+      <div className="flex items-center gap-2">
+        <Label htmlFor={`kcal-${ex.id}`} className="text-xs text-muted-foreground shrink-0">
+          Calories burned
+          {!ex.caloriesOverride && estimated > 0 && (
+            <span className="ml-1 text-[10px]">(~{estimated} est.)</span>
+          )}
+        </Label>
+        <Input
+          id={`kcal-${ex.id}`}
+          type="number"
+          step="any"
+          placeholder={estimated > 0 ? String(estimated) : "kcal"}
+          value={ex.caloriesOverride}
+          onChange={(e) => onChange({ ...ex, caloriesOverride: e.target.value })}
+          className="h-8 text-sm max-w-[90px]"
+        />
+        {displayKcal > 0 && (
+          <span className="text-xs text-muted-foreground">{displayKcal} kcal</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main form ────────────────────────────────────────────────────────────────
+
+export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
+  const [exercises, setExercises] = useState<SessionExercise[]>(() => {
+    if (editing) {
+      const d = editing.data as WorkoutData;
+      return [{
+        id: "edit",
+        exercise: d.exercise,
+        muscle_groups: d.muscle_groups ?? [],
+        sets: d.sets?.map((s) => ({
+          reps: String(s.reps),
+          weight_kg: s.weight_kg != null ? String(s.weight_kg) : "",
+          notes: s.notes ?? "",
+        })) ?? [emptySet()],
+        caloriesOverride: d.calories_burned != null ? String(d.calories_burned) : "",
+      }];
+    }
+    return [newExercise()];
+  });
+
+  const [dbExercises, setDbExercises] = useState<DbExercise[]>([]);
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchExercises().then(setDbExercises);
+  }, []);
+
+  const applyTemplate = useCallback((name: string) => {
+    const tmpl = WORKOUT_TEMPLATES[name];
+    if (!tmpl) return;
+    setExercises(tmpl.map((t) => newExercise(t.exercise, t.muscle_groups)));
+    setActiveTemplate(name);
+  }, []);
+
+  function updateExercise(idx: number, updated: SessionExercise) {
+    setExercises((prev) => prev.map((e, i) => i === idx ? updated : e));
+  }
+
+  function removeExercise(idx: number) {
+    setExercises((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function addExercise() {
+    setExercises((prev) => [...prev, newExercise()]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!exercise.trim()) { setError("Exercise name required"); return; }
+    const valid = exercises.filter((ex) => ex.exercise.trim());
+    if (valid.length === 0) { setError("Add at least one exercise"); return; }
     setSaving(true);
     setError("");
-    const parsedSets = sets
-      .filter((s) => s.reps.trim())
-      .map((s) => ({
-        reps: parseInt(s.reps) || 0,
-        weight_kg: s.weight_kg ? parseFloat(s.weight_kg) : null,
-        ...(s.notes.trim() ? { notes: s.notes.trim() } : {}),
-      }));
-    const data: WorkoutData = {
-      exercise: exercise.trim(),
-      sets: parsedSets,
-      muscle_groups: muscleGroups,
-      ...(durationNum > 0 ? { duration_min: Math.round(durationNum) } : {}),
-      ...(finalCalories > 0 ? { calories_burned: finalCalories } : {}),
-    };
     try {
       if (editing) {
+        // Edit mode: update single entry (keep existing ID)
+        const ex = valid[0];
+        const { updateEntry } = await import("@/lib/api");
+        const estimated = estimateKcal(ex.sets);
+        const calories = ex.caloriesOverride ? parseFloat(ex.caloriesOverride) || 0 : estimated;
+        const data: WorkoutData = {
+          exercise: ex.exercise.trim(),
+          sets: ex.sets.filter((s) => s.reps.trim()).map((s) => ({
+            reps: parseInt(s.reps) || 0,
+            weight_kg: s.weight_kg ? parseFloat(s.weight_kg) : null,
+            ...(s.notes.trim() ? { notes: s.notes.trim() } : {}),
+          })),
+          muscle_groups: ex.muscle_groups,
+          ...(calories > 0 ? { calories_burned: calories } : {}),
+        };
         await updateEntry(editing.id, "workout", data as Record<string, unknown>);
       } else {
-        await saveEntry("workout", data as Record<string, unknown>, entryDate);
+        // Session save: one entry per exercise
+        await Promise.all(valid.map((ex) => {
+          const estimated = estimateKcal(ex.sets);
+          const calories = ex.caloriesOverride ? parseFloat(ex.caloriesOverride) || 0 : estimated;
+          const data: WorkoutData = {
+            exercise: ex.exercise.trim(),
+            sets: ex.sets.filter((s) => s.reps.trim()).map((s) => ({
+              reps: parseInt(s.reps) || 0,
+              weight_kg: s.weight_kg ? parseFloat(s.weight_kg) : null,
+              ...(s.notes.trim() ? { notes: s.notes.trim() } : {}),
+            })),
+            muscle_groups: ex.muscle_groups,
+            ...(calories > 0 ? { calories_burned: calories } : {}),
+          };
+          return saveEntry("workout", data as Record<string, unknown>, entryDate);
+        }));
       }
-      setExercise("");
-      setSets([emptySet()]);
-      setMuscleGroups([]);
-      setDuration("");
-      setCaloriesOverride("");
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error saving");
@@ -125,141 +378,78 @@ export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-1.5" ref={exRef}>
-        <Label htmlFor="workout-exercise">Exercise</Label>
-        <div className="relative">
-          <Input
-            id="workout-exercise"
-            placeholder="Bench press, squat, deadlift…"
-            value={exercise}
-            onChange={(e) => { setExercise(e.target.value); setShowSuggestions(true); }}
-            onFocus={() => setShowSuggestions(true)}
-            autoComplete="off"
-          />
-          {showSuggestions && filteredEx.length > 0 && (
-            <ul className="absolute z-10 mt-1 w-full rounded-md border bg-background shadow-md max-h-48 overflow-y-auto">
-              {filteredEx.map((ex) => (
-                <li
-                  key={ex}
-                  className="px-3 py-2 cursor-pointer hover:bg-accent text-sm min-h-[44px] flex items-center"
-                  onMouseDown={() => { setExercise(ex); setShowSuggestions(false); }}
-                >
-                  {ex}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Sets</Label>
-        <div className="grid grid-cols-[40px_1fr_1fr_1fr_32px] gap-x-1.5 gap-y-0 text-xs text-muted-foreground px-1 mb-1">
-          <span>#</span><span>Reps</span><span>Weight (kg)</span><span>Notes</span><span />
-        </div>
-        <div className="space-y-1.5">
-          {sets.map((s, idx) => (
-            <div key={idx} className="grid grid-cols-[40px_1fr_1fr_1fr_32px] gap-1.5 items-start">
-              <div className="min-h-[44px] flex items-center justify-center text-sm text-muted-foreground">
-                {idx + 1}
-              </div>
-              <Input
-                type="number"
-                placeholder="8"
-                value={s.reps}
-                onChange={(e) => updateSet(idx, "reps", e.target.value)}
-                className="min-h-[44px]"
-              />
-              <Input
-                type="number"
-                step="0.5"
-                placeholder="60"
-                value={s.weight_kg}
-                onChange={(e) => updateSet(idx, "weight_kg", e.target.value)}
-                className="min-h-[44px]"
-              />
-              <Input
-                placeholder="notes"
-                value={s.notes}
-                onChange={(e) => updateSet(idx, "notes", e.target.value)}
-                className="min-h-[44px]"
-              />
+      {/* Template picker — hidden in edit mode */}
+      {!editing && (
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wide">Template</Label>
+          <div className="flex flex-wrap gap-2">
+            {Object.keys(WORKOUT_TEMPLATES).map((name) => (
               <button
+                key={name}
                 type="button"
-                onClick={() => setSets((prev) => prev.filter((_, i) => i !== idx))}
-                className="min-h-[44px] text-muted-foreground hover:text-destructive text-lg"
-                aria-label="Remove set"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => setSets((p) => [...p, emptySet()])} className="w-full min-h-[44px]">
-          + Add set
-        </Button>
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Muscle groups</Label>
-        <div className="flex flex-wrap gap-2">
-          {ALL_MUSCLE_GROUPS.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => toggleMuscle(m)}
-              className={`px-3 py-1.5 rounded-full border text-sm min-h-[36px] transition-colors
-                ${muscleGroups.includes(m)
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-input bg-background hover:bg-accent"
+                onClick={() => applyTemplate(name)}
+                className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${
+                  activeTemplate === name
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-input bg-background hover:bg-accent text-muted-foreground"
                 }`}
+              >
+                {name}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => { setExercises([newExercise()]); setActiveTemplate(null); }}
+              className={`px-3 py-1.5 rounded-full border text-sm transition-colors ${
+                activeTemplate === null
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-input bg-background hover:bg-accent text-muted-foreground"
+              }`}
             >
-              {m}
+              Custom
             </button>
-          ))}
+          </div>
         </div>
+      )}
+
+      {/* Exercise cards */}
+      <div className="space-y-3">
+        {exercises.map((ex, idx) => (
+          <ExerciseCard
+            key={ex.id}
+            ex={ex}
+            dbExercises={dbExercises}
+            onChange={(updated) => updateExercise(idx, updated)}
+            onRemove={() => removeExercise(idx)}
+            canRemove={exercises.length > 1}
+          />
+        ))}
       </div>
 
-      {/* Duration + calorie burn */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="workout-duration">
-            Duration (min) <span className="text-muted-foreground font-normal">optional</span>
-          </Label>
-          <Input
-            id="workout-duration"
-            type="number"
-            min="1"
-            placeholder="15"
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            className="min-h-[44px]"
-          />
+      {/* Add exercise + total kcal */}
+      {!editing && (
+        <div className="flex items-center justify-between">
+          <Button type="button" variant="outline" size="sm" onClick={addExercise} className="min-h-[36px] text-xs">
+            + Add exercise
+          </Button>
+          {(() => {
+            const total = exercises.reduce((s, ex) => {
+              const est = estimateKcal(ex.sets);
+              return s + (ex.caloriesOverride ? parseFloat(ex.caloriesOverride) || 0 : est);
+            }, 0);
+            return total > 0 ? (
+              <span className="text-xs text-muted-foreground">Session total: <strong>{total} kcal</strong></span>
+            ) : null;
+          })()}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="workout-kcal">
-            Calories burned
-            {estimatedKcal != null && !caloriesOverride && (
-              <span className="text-muted-foreground font-normal text-[11px] ml-1">~{estimatedKcal} est.</span>
-            )}
-          </Label>
-          <Input
-            id="workout-kcal"
-            type="number"
-            placeholder={estimatedKcal != null ? String(estimatedKcal) : "kcal"}
-            value={caloriesOverride}
-            onChange={(e) => setCaloriesOverride(e.target.value)}
-            className="min-h-[44px]"
-          />
-        </div>
-      </div>
+      )}
 
       {error && <p className="text-sm text-red-500">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" disabled={saving} className="flex-1 min-h-[44px]">
-          {saving ? "Saving…" : editing ? "Update" : "Log workout"}
+          {saving ? "Saving…" : editing ? "Update" : "Save session"}
         </Button>
-        {editing && (
+        {(editing || onCancelEdit) && (
           <Button type="button" variant="outline" onClick={onCancelEdit} className="min-h-[44px]">
             Cancel
           </Button>

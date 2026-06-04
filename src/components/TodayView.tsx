@@ -18,7 +18,7 @@ import SleepForm from "./forms/SleepForm";
 import ExpenseForm from "./forms/ExpenseForm";
 
 type Props = { refreshKey: number; logDate: string };
-type Target = { day_type: string; kcal_target: number; protein_target_g: number };
+type Target = { day_type: string; kcal_target: number; protein_target_g: number; bmr_kcal?: number | null };
 
 function formatTime(time: string | null) {
   if (!time) return "";
@@ -183,9 +183,12 @@ export default function TodayView({ refreshKey, logDate }: Props) {
 
   const totalKcal = entries.filter((e) => e.type === "meal").reduce((s, e) => s + ((e.data as MealData).total_kcal ?? 0), 0);
   const totalProtein = entries.filter((e) => e.type === "meal").reduce((s, e) => s + ((e.data as MealData).total_protein_g ?? 0), 0);
-  const totalBurned = entries
+  const bmr = target?.bmr_kcal ?? 1633;
+  const activeCalories = entries
     .filter((e) => e.type === "workout" || e.type === "cardio")
     .reduce((s, e) => s + (((e.data as WorkoutData | CardioData).calories_burned) ?? 0), 0);
+  const totalBurned = bmr + activeCalories;
+  const burnedTarget = bmr + (dayType === "gym" ? 500 : 300);
 
   const sortedEntries = [...entries].sort((a, b) => {
     const ta = a.entry_time ?? a.created_at ?? "";
@@ -234,7 +237,7 @@ export default function TodayView({ refreshKey, logDate }: Props) {
             <RingCell
               label="Burned"
               value={Math.round(totalBurned)}
-              max={400}
+              max={burnedTarget}
               unit="kcal"
               color="var(--chart-3)"
             />

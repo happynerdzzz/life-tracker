@@ -106,5 +106,6 @@ export type Target = {
   day_type: "gym" | "rest" | "weekend";
   kcal_target: number | null;
   protein_target_g: number | null;
+  bmr_kcal: number | null;
   notes: string | null;
 };
