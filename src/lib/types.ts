@@ -24,6 +24,8 @@ export type WorkoutData = {
     notes?: string;
   }>;
   muscle_groups: string[];
+  duration_min?: number;
+  calories_burned?: number;
 };
 
 export type CardioData = {
@@ -31,6 +33,7 @@ export type CardioData = {
   duration_min: number;
   intensity?: "low" | "moderate" | "high";
   distance_km?: number;
+  calories_burned?: number;
   notes?: string;
 };
 
@@ -57,6 +60,12 @@ export type NoteData = {
   text: string;
 };
 
+export type IncomeData = {
+  amount_inr: number;
+  source: string;
+  category: string;
+};
+
 export type EntryData =
   | ({ type: "weight" } & WeightData)
   | ({ type: "meal" } & MealData)
@@ -64,6 +73,7 @@ export type EntryData =
   | ({ type: "cardio" } & CardioData)
   | ({ type: "sleep" } & SleepData)
   | ({ type: "expense" } & ExpenseData)
+  | ({ type: "income" } & IncomeData)
   | ({ type: "note" } & NoteData);
 
 export type Entry = {

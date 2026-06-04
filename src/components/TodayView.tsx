@@ -13,6 +13,7 @@ import InsightsCard from "./InsightsCard";
 import WeightForm from "./forms/WeightForm";
 import MealForm from "./forms/MealForm";
 import WorkoutForm from "./forms/WorkoutForm";
+import CardioForm from "./forms/CardioForm";
 import SleepForm from "./forms/SleepForm";
 import ExpenseForm from "./forms/ExpenseForm";
 
@@ -36,11 +37,11 @@ function entrySummary(entry: Entry): string {
     }
     case "workout": {
       const d = entry.data as WorkoutData;
-      return `${d.exercise} · ${d.sets?.length ?? 0} sets`;
+      return `${d.exercise} · ${d.sets?.length ?? 0} sets${d.calories_burned ? ` · ${d.calories_burned} kcal` : ""}`;
     }
     case "cardio": {
       const d = entry.data as CardioData;
-      return `${d.activity} · ${d.duration_min} min`;
+      return `${d.activity} · ${d.duration_min} min${d.calories_burned ? ` · ${d.calories_burned} kcal` : ""}`;
     }
     case "sleep": {
       const d = entry.data as SleepData;
@@ -64,9 +65,10 @@ function EditModal({ entry, onSaved, onCancel }: { entry: Entry; onSaved: () => 
         {entry.type === "weight" && <WeightForm {...formProps} />}
         {entry.type === "meal" && <MealForm {...formProps} />}
         {entry.type === "workout" && <WorkoutForm {...formProps} />}
+        {entry.type === "cardio" && <CardioForm {...formProps} />}
         {entry.type === "sleep" && <SleepForm {...formProps} />}
         {entry.type === "expense" && <ExpenseForm {...formProps} />}
-        {!["weight", "meal", "workout", "sleep", "expense"].includes(entry.type) && (
+        {!["weight", "meal", "workout", "cardio", "sleep", "expense"].includes(entry.type) && (
           <p className="text-sm text-muted-foreground">No editor available for this entry type.</p>
         )}
       </div>
@@ -181,7 +183,9 @@ export default function TodayView({ refreshKey, logDate }: Props) {
 
   const totalKcal = entries.filter((e) => e.type === "meal").reduce((s, e) => s + ((e.data as MealData).total_kcal ?? 0), 0);
   const totalProtein = entries.filter((e) => e.type === "meal").reduce((s, e) => s + ((e.data as MealData).total_protein_g ?? 0), 0);
-  const workoutCount = entries.filter((e) => e.type === "workout").length;
+  const totalBurned = entries
+    .filter((e) => e.type === "workout" || e.type === "cardio")
+    .reduce((s, e) => s + (((e.data as WorkoutData | CardioData).calories_burned) ?? 0), 0);
 
   const sortedEntries = [...entries].sort((a, b) => {
     const ta = a.entry_time ?? a.created_at ?? "";
@@ -228,10 +232,10 @@ export default function TodayView({ refreshKey, logDate }: Props) {
               color="var(--chart-1)"
             />
             <RingCell
-              label="Workouts"
-              value={workoutCount}
-              max={dayType === "gym" ? 1 : dayType === "rest" ? 0 : 1}
-              unit={workoutCount === 1 ? "session" : "sessions"}
+              label="Burned"
+              value={Math.round(totalBurned)}
+              max={400}
+              unit="kcal"
               color="var(--chart-3)"
             />
           </div>

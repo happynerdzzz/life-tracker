@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,9 @@ const ALL_MUSCLE_GROUPS = [
   "Legs", "Glutes", "Core", "Calves", "Full body",
 ];
 
+const WORKOUT_MET = 4.5;
+const DEFAULT_WEIGHT_KG = 77;
+
 export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate }: Props) {
   const existing = editing?.data as WorkoutData | undefined;
   const [exercise, setExercise] = useState(existing?.exercise ?? "");
@@ -34,6 +37,10 @@ export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate 
     })) ?? [emptySet()]
   );
   const [muscleGroups, setMuscleGroups] = useState<string[]>(existing?.muscle_groups ?? []);
+  const [duration, setDuration] = useState(existing?.duration_min != null ? String(existing.duration_min) : "");
+  const [caloriesOverride, setCaloriesOverride] = useState(
+    existing?.calories_burned != null ? String(existing.calories_burned) : ""
+  );
   const [exercises, setExercises] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -58,6 +65,16 @@ export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate 
     e.toLowerCase().includes(exercise.toLowerCase())
   );
 
+  const durationNum = parseFloat(duration) || 0;
+  const estimatedKcal = useMemo(() => {
+    if (!durationNum) return null;
+    return Math.round(WORKOUT_MET * DEFAULT_WEIGHT_KG * (durationNum / 60));
+  }, [durationNum]);
+
+  const finalCalories = caloriesOverride
+    ? parseFloat(caloriesOverride) || 0
+    : (estimatedKcal ?? 0);
+
   function updateSet(idx: number, field: keyof SetRow, val: string) {
     setSets((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: val } : s)));
   }
@@ -80,16 +97,24 @@ export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate 
         weight_kg: s.weight_kg ? parseFloat(s.weight_kg) : null,
         ...(s.notes.trim() ? { notes: s.notes.trim() } : {}),
       }));
-    const data = { exercise: exercise.trim(), sets: parsedSets, muscle_groups: muscleGroups };
+    const data: WorkoutData = {
+      exercise: exercise.trim(),
+      sets: parsedSets,
+      muscle_groups: muscleGroups,
+      ...(durationNum > 0 ? { duration_min: Math.round(durationNum) } : {}),
+      ...(finalCalories > 0 ? { calories_burned: finalCalories } : {}),
+    };
     try {
       if (editing) {
-        await updateEntry(editing.id, "workout", data);
+        await updateEntry(editing.id, "workout", data as Record<string, unknown>);
       } else {
-        await saveEntry("workout", data, entryDate);
+        await saveEntry("workout", data as Record<string, unknown>, entryDate);
       }
       setExercise("");
       setSets([emptySet()]);
       setMuscleGroups([]);
+      setDuration("");
+      setCaloriesOverride("");
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error saving");
@@ -192,6 +217,40 @@ export default function WorkoutForm({ onSaved, editing, onCancelEdit, entryDate 
               {m}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Duration + calorie burn */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="workout-duration">
+            Duration (min) <span className="text-muted-foreground font-normal">optional</span>
+          </Label>
+          <Input
+            id="workout-duration"
+            type="number"
+            min="1"
+            placeholder="15"
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            className="min-h-[44px]"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="workout-kcal">
+            Calories burned
+            {estimatedKcal != null && !caloriesOverride && (
+              <span className="text-muted-foreground font-normal text-[11px] ml-1">~{estimatedKcal} est.</span>
+            )}
+          </Label>
+          <Input
+            id="workout-kcal"
+            type="number"
+            placeholder={estimatedKcal != null ? String(estimatedKcal) : "kcal"}
+            value={caloriesOverride}
+            onChange={(e) => setCaloriesOverride(e.target.value)}
+            className="min-h-[44px]"
+          />
         </div>
       </div>
 

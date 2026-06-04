@@ -68,6 +68,12 @@ export async function fetchExercises(): Promise<{ id: string; name: string; musc
   return res.json();
 }
 
+export async function fetchFoods(): Promise<{ id: string; name: string; kcal_per_serving: number | null; protein_g_per_serving: number | null; typical_serving: string | null }[]> {
+  const res = await fetch("/api/foods");
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export async function fetchCategories(kind?: string): Promise<{ id: string; name: string; kind: string }[]> {
   const url = kind ? `/api/categories?kind=${kind}` : "/api/categories";
   const res = await fetch(url);

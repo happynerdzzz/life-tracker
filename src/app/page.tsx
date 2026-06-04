@@ -8,15 +8,17 @@ import DumpDayBox from "@/components/DumpDayBox";
 import WeightForm from "@/components/forms/WeightForm";
 import MealForm from "@/components/forms/MealForm";
 import WorkoutForm from "@/components/forms/WorkoutForm";
+import CardioForm from "@/components/forms/CardioForm";
 import SleepForm from "@/components/forms/SleepForm";
 import ExpenseForm from "@/components/forms/ExpenseForm";
 
-type FormType = "dump" | "weight" | "meal" | "workout" | "sleep" | "expense" | null;
+type FormType = "dump" | "weight" | "meal" | "workout" | "cardio" | "sleep" | "expense" | null;
 
 const DOCK_ITEMS: { id: FormType; label: string; emoji: string }[] = [
   { id: "weight",  label: "Weight",  emoji: "⚖️" },
   { id: "meal",    label: "Meal",    emoji: "🍽️" },
   { id: "workout", label: "Workout", emoji: "🏋️" },
+  { id: "cardio",  label: "Cardio",  emoji: "🏊" },
   { id: "sleep",   label: "Sleep",   emoji: "😴" },
   { id: "expense", label: "Spend",   emoji: "💸" },
 ];
@@ -25,6 +27,7 @@ const FORM_TITLES: Record<string, string> = {
   weight: "Log weight",
   meal: "Log meal",
   workout: "Log workout",
+  cardio: "Log cardio",
   sleep: "Log sleep",
   expense: "Log expense",
 };
@@ -147,6 +150,7 @@ export default function Home() {
               {item.id === "weight"  && <WeightForm  onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
               {item.id === "meal"    && <MealForm    onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
               {item.id === "workout" && <WorkoutForm onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
+              {item.id === "cardio"  && <CardioForm  onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
               {item.id === "sleep"   && <SleepForm   onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
               {item.id === "expense" && <ExpenseForm onSaved={handleFormSaved} onCancelEdit={closeForm} entryDate={logDate} />}
             </div>

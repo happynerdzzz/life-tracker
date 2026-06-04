@@ -19,14 +19,19 @@ import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
 import { fetchEntriesRange, deleteEntry } from "@/lib/api";
-import type { Entry, ExpenseData } from "@/lib/types";
+import type { Entry, ExpenseData, IncomeData } from "@/lib/types";
 import StatementPreviewModal from "./StatementPreviewModal";
 import ExpenseForm from "./forms/ExpenseForm";
+import IncomeForm from "./forms/IncomeForm";
 import type { StatementRow } from "@/app/api/statements/route";
 
 const EXPENSE_COLORS = [
   "var(--chart-5)", "#f97316", "#ec4899", "#06b6d4",
   "#8b5cf6", "#10b981", "#ef4444", "#3b82f6",
+];
+
+const INCOME_COLORS = [
+  "#10b981", "#06b6d4", "#8b5cf6", "#3b82f6", "#f97316", "#ec4899",
 ];
 
 const CHART_MARGIN = { top: 8, right: 8, left: 0, bottom: 0 };
@@ -56,7 +61,7 @@ function fmtMonthLabel(year: number, month: number) {
 function ChartEmpty() {
   return (
     <div className="flex h-36 items-center justify-center text-sm text-muted-foreground">
-      No expense data for this period
+      No data for this period
     </div>
   );
 }
@@ -73,11 +78,11 @@ function ChartScroll({ count, height = 200, children }: { count: number; height?
   );
 }
 
-// ─── Donut chart ──────────────────────────────────────────────────────────────
+// ─── Donut chart (reused for both spend and income) ───────────────────────────
 
 type DonutSlice = { name: string; value: number };
 
-function SpendDonut({ slices }: { slices: DonutSlice[] }) {
+function SpendDonut({ slices, colors }: { slices: DonutSlice[]; colors: string[] }) {
   if (slices.length === 0) return <ChartEmpty />;
   const total = slices.reduce((s, x) => s + x.value, 0);
   return (
@@ -98,7 +103,7 @@ function SpendDonut({ slices }: { slices: DonutSlice[] }) {
               endAngle={-270}
             >
               {slices.map((_, i) => (
-                <Cell key={i} fill={EXPENSE_COLORS[i % EXPENSE_COLORS.length]} />
+                <Cell key={i} fill={colors[i % colors.length]} />
               ))}
             </Pie>
             <Tooltip
@@ -108,7 +113,7 @@ function SpendDonut({ slices }: { slices: DonutSlice[] }) {
                   rows={payload?.map((p, i) => ({
                     name: String(p.name),
                     value: `₹${Math.round(Number(p.value))}`,
-                    color: EXPENSE_COLORS[i % EXPENSE_COLORS.length],
+                    color: colors[i % colors.length],
                   })) ?? []}
                 />
               )}
@@ -121,7 +126,6 @@ function SpendDonut({ slices }: { slices: DonutSlice[] }) {
         </div>
       </div>
 
-      {/* Category bar list */}
       <div className="space-y-1.5 mt-3">
         {slices.map((s, i) => {
           const pct = total > 0 ? Math.round((s.value / total) * 100) : 0;
@@ -129,7 +133,7 @@ function SpendDonut({ slices }: { slices: DonutSlice[] }) {
             <div key={s.name} className="space-y-0.5">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-sm shrink-0" style={{ background: EXPENSE_COLORS[i % EXPENSE_COLORS.length] }} />
+                  <span className="size-2.5 rounded-sm shrink-0" style={{ background: colors[i % colors.length] }} />
                   <span className="text-foreground">{s.name}</span>
                 </div>
                 <div className="flex items-center gap-2 tabular-nums text-muted-foreground">
@@ -140,7 +144,7 @@ function SpendDonut({ slices }: { slices: DonutSlice[] }) {
               <div className="h-1 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
-                  style={{ width: `${pct}%`, background: EXPENSE_COLORS[i % EXPENSE_COLORS.length] }}
+                  style={{ width: `${pct}%`, background: colors[i % colors.length] }}
                 />
               </div>
             </div>
@@ -217,26 +221,39 @@ function TransactionRow({
   onDelete: (id: string) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
-  const d = entry.data as ExpenseData;
+  const isIncome = entry.type === "income";
+  const d = entry.data as ExpenseData | IncomeData;
+  const amount = isIncome ? (d as IncomeData).amount_inr : (d as ExpenseData).amount_inr;
+  const label = isIncome ? (d as IncomeData).source : (d as ExpenseData).item;
+  const category = d.category;
 
   return (
     <tr className="group border-b border-border/40 last:border-0 hover:bg-muted/30 transition-colors">
       <td className="py-2.5 pl-4 pr-2 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
         {entry.entry_date}
       </td>
-      <td className="py-2.5 px-2 text-sm max-w-[140px] truncate">
-        {d.item}
-        {d.split && <span className="ml-1 text-[10px] text-muted-foreground/70">split</span>}
+      <td className="py-2.5 px-2 text-[11px] shrink-0">
+        {isIncome ? (
+          <span className="inline-flex items-center gap-0.5 text-green-600 font-medium">↑ income</span>
+        ) : (
+          <span className="text-muted-foreground/60">↓ expense</span>
+        )}
+      </td>
+      <td className="py-2.5 px-2 text-sm max-w-[120px] truncate">
+        {label}
+        {!isIncome && (entry.data as ExpenseData).split && (
+          <span className="ml-1 text-[10px] text-muted-foreground/70">split</span>
+        )}
       </td>
       <td className="py-2.5 px-2 text-xs text-muted-foreground hidden sm:table-cell">
-        {d.category}
+        {category}
       </td>
-      <td className="py-2.5 px-2 text-sm tabular-nums font-mono text-right">
-        ₹{Math.round(d.amount_inr)}
+      <td className={`py-2.5 px-2 text-sm tabular-nums font-mono text-right ${isIncome ? "text-green-600" : ""}`}>
+        {isIncome ? "+" : ""}₹{Math.round(amount)}
       </td>
       <td className="py-2.5 pl-2 pr-4 text-right">
         {!confirming ? (
-          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity sm:flex-row">
+          <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               onClick={() => onEdit(entry)}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -284,7 +301,7 @@ export default function FinanceDashboard() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [entries, setEntries] = useState<Entry[]>([]);
-  const [prevEntries, setPrevEntries] = useState<Entry[]>([]);
+  const [incomeEntries, setIncomeEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Statement import state
@@ -296,19 +313,18 @@ export default function FinanceDashboard() {
   // CRUD state
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [addingNew, setAddingNew] = useState(false);
+  const [addingIncome, setAddingIncome] = useState(false);
 
   const today = todayIST();
 
   async function reloadEntries() {
     const { first, last } = monthBounds(year, month);
-    const prev = prevMonth(year, month);
-    const { first: prevFirst, last: prevLast } = monthBounds(prev.year, prev.month);
-    const [curr, prevData] = await Promise.all([
+    const [curr, inc] = await Promise.all([
       fetchEntriesRange(first, last, "expense"),
-      fetchEntriesRange(prevFirst, prevLast, "expense"),
+      fetchEntriesRange(first, last, "income"),
     ]);
     setEntries(curr);
-    setPrevEntries(prevData);
+    setIncomeEntries(inc);
   }
 
   useEffect(() => {
@@ -316,13 +332,15 @@ export default function FinanceDashboard() {
     async function load() {
       setLoading(true);
       const { first, last } = monthBounds(year, month);
-      const prev = prevMonth(year, month);
-      const { first: prevFirst, last: prevLast } = monthBounds(prev.year, prev.month);
-      const [curr, prevData] = await Promise.all([
+      const [curr, inc] = await Promise.all([
         fetchEntriesRange(first, last, "expense"),
-        fetchEntriesRange(prevFirst, prevLast, "expense"),
+        fetchEntriesRange(first, last, "income"),
       ]);
-      if (!cancelled) { setEntries(curr); setPrevEntries(prevData); setLoading(false); }
+      if (!cancelled) {
+        setEntries(curr);
+        setIncomeEntries(inc);
+        setLoading(false);
+      }
     }
     load();
     return () => { cancelled = true; };
@@ -347,11 +365,13 @@ export default function FinanceDashboard() {
     () => entries.reduce((s, e) => s + ((e.data as ExpenseData).amount_inr ?? 0), 0),
     [entries]
   );
-  const prevTotalSpend = useMemo(
-    () => prevEntries.reduce((s, e) => s + ((e.data as ExpenseData).amount_inr ?? 0), 0),
-    [prevEntries]
+
+  const totalIncome = useMemo(
+    () => incomeEntries.reduce((s, e) => s + ((e.data as IncomeData).amount_inr ?? 0), 0),
+    [incomeEntries]
   );
-  const delta = prevTotalSpend > 0 ? ((totalSpend - prevTotalSpend) / prevTotalSpend) * 100 : null;
+
+  const net = totalIncome - totalSpend;
 
   const spendSlices = useMemo<DonutSlice[]>(() => {
     const byCat = new Map<string, number>();
@@ -364,12 +384,28 @@ export default function FinanceDashboard() {
       .sort((a, b) => b.value - a.value);
   }, [entries]);
 
+  const incomeSlices = useMemo<DonutSlice[]>(() => {
+    const byCat = new Map<string, number>();
+    incomeEntries.forEach((e) => {
+      const d = e.data as IncomeData;
+      byCat.set(d.category, (byCat.get(d.category) ?? 0) + d.amount_inr);
+    });
+    return Array.from(byCat.entries())
+      .map(([name, value]) => ({ name, value: Math.round(value) }))
+      .sort((a, b) => b.value - a.value);
+  }, [incomeEntries]);
+
   const categories = useMemo(() => spendSlices.map((s) => s.name), [spendSlices]);
 
-  const sortedEntries = useMemo(
-    () => [...entries].sort((a, b) => b.entry_date.localeCompare(a.entry_date)),
-    [entries]
-  );
+  const sortedEntries = useMemo(() => {
+    const all = [...entries, ...incomeEntries];
+    return all.sort((a, b) => b.entry_date.localeCompare(a.entry_date));
+  }, [entries, incomeEntries]);
+
+  const addEntryDate = useMemo(() => {
+    const { first } = monthBounds(year, month);
+    return first > today ? today : first;
+  }, [year, month, today]);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -415,11 +451,10 @@ export default function FinanceDashboard() {
     await reloadEntries();
   }
 
-  // entryDate for "add new": first day of selected month, capped at today
-  const addEntryDate = useMemo(() => {
-    const { first } = monthBounds(year, month);
-    return first > today ? today : first;
-  }, [year, month, today]);
+  async function handleAddIncomeSaved() {
+    setAddingIncome(false);
+    await reloadEntries();
+  }
 
   return (
     <div className="space-y-6">
@@ -444,7 +479,6 @@ export default function FinanceDashboard() {
           </button>
         </div>
 
-        {/* Import statement */}
         <div className="flex flex-col items-end gap-1">
           <label className="cursor-pointer">
             <input
@@ -478,39 +512,47 @@ export default function FinanceDashboard() {
           <div className="grid grid-cols-3 gap-3">
             <Card>
               <CardContent className="px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Total spend</p>
+                <p className="text-xs text-muted-foreground mb-1">Income</p>
+                <p className="font-mono font-semibold text-lg tabular-nums text-green-600">
+                  ₹{Math.round(totalIncome)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="px-4 py-3">
+                <p className="text-xs text-muted-foreground mb-1">Spend</p>
                 <p className="font-mono font-semibold text-lg tabular-nums">₹{Math.round(totalSpend)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">vs last month</p>
-                {delta !== null ? (
-                  <p className={`font-semibold text-lg tabular-nums ${delta > 0 ? "text-destructive" : "text-green-500"}`}>
-                    {delta > 0 ? "+" : ""}{Math.round(delta)}%
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground text-sm">—</p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="px-4 py-3">
-                <p className="text-xs text-muted-foreground mb-1">Transactions</p>
-                <p className="font-semibold text-lg">{entries.length}</p>
+                <p className="text-xs text-muted-foreground mb-1">Net</p>
+                <p className={`font-mono font-semibold text-lg tabular-nums ${net >= 0 ? "text-green-600" : "text-destructive"}`}>
+                  {net >= 0 ? "+" : ""}₹{Math.round(Math.abs(net))}
+                </p>
               </CardContent>
             </Card>
           </div>
 
-          {/* Category breakdown */}
+          {/* Income breakdown */}
+          {incomeSlices.length > 0 && (
+            <Card>
+              <CardContent className="px-4 pb-4 pt-3">
+                <SectionHeader title="Income by source" className="mb-4" />
+                <SpendDonut slices={incomeSlices} colors={INCOME_COLORS} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Spend by category */}
           <Card>
             <CardContent className="px-4 pb-4 pt-3">
               <SectionHeader title="Spend by category" className="mb-4" />
-              <SpendDonut slices={spendSlices} />
+              <SpendDonut slices={spendSlices} colors={EXPENSE_COLORS} />
             </CardContent>
           </Card>
 
-          {/* Daily breakdown */}
+          {/* Daily spend */}
           <Card>
             <CardContent className="px-4 pb-4 pt-3">
               <SectionHeader title="Daily spend" className="mb-3" />
@@ -523,12 +565,20 @@ export default function FinanceDashboard() {
             <CardContent className="px-4 pb-4 pt-3">
               <div className="flex items-center justify-between mb-3">
                 <SectionHeader title="Transactions" />
-                <button
-                  onClick={() => setAddingNew(true)}
-                  className="text-xs font-medium text-primary hover:underline"
-                >
-                  + Add transaction
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setAddingIncome(true)}
+                    className="text-xs font-medium text-green-600 hover:underline"
+                  >
+                    + Add income
+                  </button>
+                  <button
+                    onClick={() => setAddingNew(true)}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    + Add expense
+                  </button>
+                </div>
               </div>
 
               {sortedEntries.length === 0 ? (
@@ -539,6 +589,7 @@ export default function FinanceDashboard() {
                     <thead>
                       <tr className="border-b border-border/60">
                         <th className="py-2 pl-4 pr-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                        <th className="py-2 px-2 text-left text-xs font-medium text-muted-foreground">Type</th>
                         <th className="py-2 px-2 text-left text-xs font-medium text-muted-foreground">Item</th>
                         <th className="py-2 px-2 text-left text-xs font-medium text-muted-foreground hidden sm:table-cell">Category</th>
                         <th className="py-2 px-2 text-right text-xs font-medium text-muted-foreground">Amount</th>
@@ -576,22 +627,32 @@ export default function FinanceDashboard() {
       {editingEntry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-            <h2 className="font-semibold text-lg mb-4">Edit transaction</h2>
-            <ExpenseForm
-              editing={editingEntry}
-              onSaved={handleEditSaved}
-              onCancelEdit={() => setEditingEntry(null)}
-            />
+            <h2 className="font-semibold text-lg mb-4">
+              Edit {editingEntry.type === "income" ? "income" : "expense"}
+            </h2>
+            {editingEntry.type === "income" ? (
+              <IncomeForm
+                editing={editingEntry}
+                onSaved={handleEditSaved}
+                onCancelEdit={() => setEditingEntry(null)}
+              />
+            ) : (
+              <ExpenseForm
+                editing={editingEntry}
+                onSaved={handleEditSaved}
+                onCancelEdit={() => setEditingEntry(null)}
+              />
+            )}
           </div>
         </div>
       )}
 
-      {/* Add new modal */}
+      {/* Add expense modal */}
       {addingNew && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-lg">Add transaction</h2>
+              <h2 className="font-semibold text-lg">Add expense</h2>
               <button
                 onClick={() => setAddingNew(false)}
                 className="text-muted-foreground hover:text-foreground text-xl leading-none"
@@ -604,6 +665,29 @@ export default function FinanceDashboard() {
               entryDate={addEntryDate}
               onSaved={handleAddSaved}
               onCancelEdit={() => setAddingNew(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Add income modal */}
+      {addingIncome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg">Add income</h2>
+              <button
+                onClick={() => setAddingIncome(false)}
+                className="text-muted-foreground hover:text-foreground text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <IncomeForm
+              entryDate={addEntryDate}
+              onSaved={handleAddIncomeSaved}
+              onCancelEdit={() => setAddingIncome(false)}
             />
           </div>
         </div>
