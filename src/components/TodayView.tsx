@@ -5,7 +5,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Ring } from "@/components/ui/ring";
-import { fetchEntries, deleteEntry, fetchTargets, getDayType } from "@/lib/api";
+import { fetchEntries, deleteEntry, fetchTargets, getDayType, patchEntryDate } from "@/lib/api";
 import { CATEGORY } from "@/lib/theme";
 import type { Entry, MealData, WorkoutData, CardioData, SleepData, ExpenseData, WeightData } from "@/lib/types";
 import StreakStrip from "./StreakStrip";
@@ -57,11 +57,45 @@ function entrySummary(entry: Entry): string {
 }
 
 function EditModal({ entry, onSaved, onCancel }: { entry: Entry; onSaved: () => void; onCancel: () => void }) {
-  const formProps = { editing: entry, onSaved, onCancelEdit: onCancel };
+  const [editDate, setEditDate] = useState(entry.entry_date);
+  const [editTime, setEditTime] = useState(entry.entry_time ?? "");
+
+  async function handleFormSaved() {
+    const dateChanged = editDate !== entry.entry_date;
+    const timeChanged = editTime !== (entry.entry_time ?? "");
+    if (dateChanged || timeChanged) {
+      await patchEntryDate(entry.id, editDate, editTime || null);
+    }
+    onSaved();
+  }
+
+  const formProps = { editing: entry, onSaved: handleFormSaved, onCancelEdit: onCancel };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
         <h2 className="font-semibold text-lg mb-4 capitalize">Edit {entry.type}</h2>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Date</label>
+            <input
+              type="date"
+              value={editDate}
+              onChange={(e) => setEditDate(e.target.value)}
+              className="w-full h-10 rounded-xl border border-input bg-muted/40 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Time <span className="text-muted-foreground font-normal text-xs">optional</span></label>
+            <input
+              type="time"
+              value={editTime}
+              onChange={(e) => setEditTime(e.target.value)}
+              className="w-full h-10 rounded-xl border border-input bg-muted/40 px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+            />
+          </div>
+        </div>
+
         {entry.type === "weight" && <WeightForm {...formProps} />}
         {entry.type === "meal" && <MealForm {...formProps} />}
         {entry.type === "workout" && <WorkoutForm {...formProps} />}

@@ -43,6 +43,18 @@ export async function updateEntry(
   return res.json();
 }
 
+export async function patchEntryDate(
+  id: string,
+  entry_date: string,
+  entry_time: string | null,
+): Promise<void> {
+  await fetch(`/api/entries/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entry_date, entry_time, source: "manual_edit" }),
+  });
+}
+
 export async function deleteEntry(id: string): Promise<void> {
   const res = await fetch(`/api/entries/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete entry");
