@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/ui/section-header";
 import { generateWeeklyReview, type WeeklyReview } from "@/app/review/actions";
+import { fetchEntriesRange } from "@/lib/api";
+import { generateWeekCSV } from "@/lib/csv";
 
 // ─── Week helpers ─────────────────────────────────────────────────────────────
 
@@ -205,6 +207,30 @@ export default function WeeklyReviewClient({ initialReviews }: Props) {
   const [activeReview, setActiveReview] = useState<WeeklyReview | null>(initialReviews[0] ?? null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isExporting, setIsExporting] = useState(false);
+
+  async function handleExportCSV() {
+    if (!selectedWeek) return;
+    setIsExporting(true);
+    try {
+      const weekEnd = (() => {
+        const d = new Date(selectedWeek + "T00:00:00");
+        d.setDate(d.getDate() + 6);
+        return toIsoDate(d);
+      })();
+      const entries = await fetchEntriesRange(selectedWeek, weekEnd);
+      const csv = generateWeekCSV(entries);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `life-tracker-${selectedWeek}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   function handleGenerate() {
     if (!selectedWeek) return;
@@ -259,6 +285,15 @@ export default function WeeklyReviewClient({ initialReviews }: Props) {
               ) : (
                 "Generate review"
               )}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleExportCSV}
+              disabled={isExporting || !selectedWeek}
+              className="shrink-0 h-9"
+            >
+              {isExporting ? "Exporting…" : "Export CSV"}
             </Button>
           </div>
 
